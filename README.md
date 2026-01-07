@@ -1,240 +1,311 @@
-# Rapport de TP : Mise en œuvre d'une chaîne CI/CD avec GitLab
+# Rapport du fiche de TP CI/CD
 
 | Date | Matière | Etudiants |
 |-|-|-|
 | 07/01/2026 | INTÉ DEPLOIEMENT CONTINUS | - Mesrop AGHUMYAN<br>- Ian BERTIN |
 
-# 1. Introduction
+# Sommaire
 
-L'objectif de ce TP est de mettre en place une chaîne de livraison continue.
+1. [Notes préalables](#1-notes-préalables)
+    - 1.1 [Pré-requis](#11-pré-requis)
+    - 1.2 [Comptes](#12-comptes)
+2. [Mise en place de la VM GitLab](#2-mise-en-place-de-la-vm-gitlab)
+    - 2.1 [VirtualBox](#21-virtualbox)
+    - 2.2 [Sur le système Debian cicd-gitlab](#22-sur-le-système-debian-cicd-gitlab)
+        - 2.2.1 [Modifications de base](#221-modifications-de-base)
+    - 2.3 [Créer un dépôt](#23-créer-un-dépôt)
+3. [Mise en place de la VM GitLab Runner](#3-mise-en-place-de-la-vm-gitlab-runner)
+    - 3.1 [VirtualBox](#31-virtualbox)
+    - 3.2 [Sur le système Debian cicd-gitlabrunner](#32-sur-le-système-debian-cicd-gitlabrunner)
+        - 3.2.1 [Modifications de base](#321-modifications-de-base)
+    - 3.3 [Éditer la configuration de GitLab Runner](#33-éditer-la-configuration-de-gitlab-runner)
+4. [Premières contributions dans notre dépôt](#4-premières-contributions-dans-notre-dépôt)
+    - 4.1 [.gitlab-ci.yml](#41-gitlab-ciyml)
+    - 4.2 [index.html](#42-indexhtml)
+    - 4.3 [Pipelines](#43-pipelines)
+5. [Génération de livrables](#5-génération-de-livrables)
+    - 5.1 [Ajout et modifications d’éléments](#51-ajout-et-modifications-déléments)
+        - 5.1.1 [index.html](#511-indexhtml)
+        - 5.1.2 [style.css](#512-stylecss)
+        - 5.1.3 [logo-gitlab.jpeg](#513-logo-gitlabjpeg)
+    - 5.2 [Mise en place de la compression d'images](#52-mise-en-place-de-la-compression-dimages)
+    - 5.3 [Mise en place de la minification CSS](#53-mise-en-place-de-la-minification-css)
+    - 5.4 [Export en Artifacts](#54-export-en-artifacts)
+6. [Mise en place de Stages](#6-mise-en-place-de-stages)
+7. [Déploiement d'un livrable](#7-déploiement-dun-livrable)
+    - 7.1 [Créer un Artifact regroupant tous les fichiers](#71-créer-un-artifact-regroupant-tous-les-fichiers)
+    - 7.2 [Ajout de la clé privée SSH dans GitLab](#72-ajout-de-la-clé-privée-ssh-dans-gitlab)
+    - 7.3 [Mise en place de la VM de déploiement](#73-mise-en-place-de-la-vm-de-déploiement)
+    - 7.4 [Ajouter un job de déploiement](#74-ajouter-un-job-de-déploiement)
+8. [Mise en place des différentes branches](#8-mise-en-place-des-différentes-branches)
+9. [Exfiltration du .gitlab-ci.yml](#9-exfiltration-du-gitlab-ciyml)
+10. [RenovateBot](#10-renovatebot)
+11. [Releases](#11-releases)
 
-L'infrastructure repose sur trois piliers :
-- GitLab Server : Gestion du code et orchestration.
-- GitLab Runner : Exécuteur des tâches (Build/Test) dans des conteneurs Docker.
-- Serveur de déploiement : Serveur web final recevant les livrables.
+# 1. Notes préalables
 
-# 2. Mise en place de l'infrastructure
+## 1.1 Pré-requis
 
-## 2.1 Configuration réseau
+Pour la réalisation de ce TP, nous avons préparé un environnement de virtualisation sous VirtualBox disposant de :
 
-Après l'import des VMs, nous avons configuré la résolution de noms locale pour simuler un environnement réel.
+- **30 Go d'espace disque** et **16 Go de RAM**.
 
-Fichier hosts (Machine hôte) : Ajout de 192.168.56.10 gitlab.example.com pour accéder à l'interface.
+- L'accès aux identifiants administrateurs (root) et utilisateurs (cicd).
 
-Fichier hosts (Runner) : Modification identique pour que le Runner puisse contacter le serveur.
+## 1.2 Comptes
 
-## 2.2 Liaison entre le GitLab et le Runner
+Les accès ont été centralisés pour la configuration des machines Debian et de l'interface GitLab :
 
-Pour permettre au Runner Docker de communiquer avec GitLab, nous avons édité `/etc/gitlab-runner/config.toml` :
-
-```toml
-[runners.docker]
-  extra_hosts = ["gitlab.example.com:192.168.56.10"]
-```
-
-Validation : L'état du Runner est passé au vert dans l'interface d'administration GitLab.
-
-[Capture d'écran : Etat du Runner au vert]
-
-# 3. Phase de test
-
-Nous avons créé un premier job pour vérifier la qualité du code HTML avec l'outil `tidy`.
-
-- Fichier `index.html` : Contient initialement une erreur (balise `<meta` non fermée).
-
-```html
-<!DOCTYPE html>
-<html lang="fr">
-    <head>
-        <meta charset="utf-8"
-        <title>Cours CI/CD</title>
-    </head>
-    <body>
-        <h1>Page de test !</h1>
-    </body>
-</html>
-```
-
-- Résultat : Le job `lint_html` échoue comme prévu, bloquant la suite de la chaîne.
-
-[Capture d'écran : Pipeline en échec montrant l'erreur de syntaxe détectée par tidy]
-
-# 4. Génération de livrables
-
-Une fois le code corrigé, nous avons ajouté des étapes de transformation (minification et compression).
-
-## 4.1 Jobs de transformation
-
-| Job | Outil utilisé | Action |
+| Compte | Identifiant | Mot de passe |
 |-|-|-|
-| compress_pictures | Imagemagick | Réduction de la qualité JPEG à 70% |
-| minify_css | Uglifycss (Node:24) | Suppression des espaces et commentaires du CSS | 
+| Systèmes Debian | root | mineales |
+| Compte administrateur GitLab | root | mineales |
+| Compte utilisateur normal GitLab | cicd | mineales |
 
-## 4.2 Gestion des artifacts
+# 2. Mise en place de la VM GitLab
 
-Pour conserver les fichiers générés et les passer d'un job à l'autre, nous avons utilisé les `artifacts` :
+## 2.1 VirtualBox
 
-```yaml
-artifacts:
-  paths:
-    - "output/"
-  expire_in: 7 days
-```
+Nous avons importé l'appareil virtuel **cicd-gitlab.ova**. Cette machine servira de serveur central pour l'hébergement du code et l'orchestration des pipelines.
 
-Vérification : En téléchargeant l'artifact depuis l'interface GitLab, nous avons constaté que le fichier style.css est passé de 3 lignes à 1 seule ligne compacte.
+## 2.2 Sur le système Debian cicd-gitlab
 
-# 5. Orchestration par stages
+### 2.2.1 Modifications de base
 
-Pour organiser l'exécution, nous avons défini des `stages`. Cela permet de s'assurer que les tests passent avant de lancer le build.
+Après démarrage, nous avons récupéré l'adresse IP via la commande `ip a`.
 
-```yaml
-stages:
-  - test
-  - build
-  - bundle
-  - deploy
-```
+Adresse IP identifiée : **192.168.56.10**.
 
-- Observations : Les jobs `compress_pictures` et `minify_css` s'exécutent en parallèle car ils appartiennent au même stage (`build`), optimisant ainsi le temps total de livraison.
+Afin d'accéder au serveur via un nom de domaine, nous avons modifié le fichier **hosts** de notre machine hôte :
 
-# 6. Déploiement continu (CD)
+**Windows** : `C:\Windows\system32\drivers\etc\hosts`
 
-## 6.1 Sécurisation (Variables CI/CD)
+**Ligne ajoutée** : `192.168.56.10 gitlab.example.com`
 
-Pour permettre au Runner de se connecter au serveur de déploiement sans intervention humaine, nous avons utilisé une variable d'environnement masquée : `SSH_PRIVATE_KEY`.
+## 2.3 Créer un dépôt
 
-- Cela évite de stocker des clés privées en clair dans le dépôt Git.
+Connectés avec l'utilisateur **cicd**, nous avons créé un projet vide :
 
-## 6.2 Le Job de Déploiement
+**Project name** : TP CI CD
 
-Le job `deploy` effectue les actions suivantes :
-- Installation du client OpenSSH.
-- Configuration de la clé privée dans le conteneur.
-- Transfert des fichiers vers `/var/www/html/` sur la VM `192.168.56.30`.
+**Namespace** : cicd
 
-Script de déploiement final :
+# 3. Mise en place de la VM GitLab Runner
 
-```yaml
-deploy:
-  stage: deploy
-  script:
-    - apt update && apt install -y openssh-client
-    - mkdir ~/.ssh && chmod 700 ~/.ssh
-    - echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa && chmod 400 ~/.ssh/id_rsa
-    - scp -o StrictHostKeyChecking=no -r output/* root@192.168.56.30:/var/www/html/
-```
+## 3.1 VirtualBox
 
-# 7. Gestion multi-branches et déploiement dynamique
+Importation de la machine **cicd-gitlabrunner.ova**. Cette VM agira comme l'exécuteur des tâches définies dans nos pipelines.
 
-Cette dernière étape introduit la gestion d'environnements distincts (Staging vs Production) et l'utilisation des métadonnées de commit pour assurer la traçabilité des déploiements.
+## 3.2 Sur le système Debian cicd-gitlabrunner
 
-## 7.1 Stratégie de branches
+### 3.2.1 Modifications de base
 
-Nous avons créé une branche de développement nommée `dev` pour isoler les travaux en cours avant leur fusion sur la branche principale.
+Comme pour la VM précédente, nous avons configuré le fichier `/etc/hosts` de la VM Runner pour qu'elle puisse résoudre l'adresse **gitlab.example.com**.
 
-- Modification du code : Ajout d'une balise `<p>Infos</p>` dans le fichier `index.html` servant de marqueur pour l'injection de données.
+## 3.3 Éditer la configuration de GitLab Runner
 
-- Contrôle d'exécution (`only`) : Nous avons restreint le job `minify_css` à la branche `main` uniquement. Cela permet d'alléger le pipeline de développement en évitant des tâches de production non nécessaires en phase de test.
+Pour que les conteneurs Docker lancés par le Runner puissent communiquer avec le serveur GitLab, nous avons édité `/etc/gitlab-runner/config.toml`.
 
-## 7.2 Utilisation des variables prédéfinies de GitLab
+**Modification** : Ajout de `extra_hosts = ["gitlab.example.com:192.168.56.10"]` dans la section `[runners.docker]`.
 
-Pour assurer la traçabilité de chaque déploiement, nous utilisons les variables d'environnement de GitLab CI pour modifier dynamiquement le contenu du site.
+**Redémarrage** : `systemctl restart gitlab-runner`.
 
-Dans le job `build_artifacts`, nous avons injecté les informations de commit via la commande `sed` :
+**Vérification** : Dans l'interface GitLab **(Admin > Runners)**, le Runner apparaît avec une pastille verte.
 
-```bash
-# Remplacement de la chaîne "Infos" par les données du commit
-- sed -i "s/Infos/Auteur : $CI_COMMIT_AUTHOR | Commit : $CI_COMMIT_SHORT_SHA/g" index.html
-```
+![Apparition du Runner avec une pastille verte](images/PARTIE_3/3-screen-1.png)
 
-## 7.3 Déploiement ciblé par environnement
+# 4. Premières contributions dans notre dépôt
 
-Afin de ne pas écraser la version de production lors des tests sur la branche dev, nous avons configuré le job de déploiement pour cibler des répertoires différents sur le serveur de destination.
+## 4.1 .gitlab-ci.yml
 
-Script de déploiement dynamique :
-
-```yaml
-deploy:
-  stage: deploy
-  script:
-    - apt update && apt install -y openssh-client
-    - mkdir ~/.ssh && chmod 700 ~/.ssh
-    - echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa && chmod 400 ~/.ssh/id_rsa
-    - |
-      if [ "$CI_COMMIT_BRANCH" == "main" ]; then
-        DEST_DIR="/var/www/html/main"
-      else
-        DEST_DIR="/var/www/html/dev"
-      fi
-    - ssh -o StrictHostKeyChecking=accept-new root@192.168.56.30 "mkdir -p $DEST_DIR"
-    - scp -r output/* root@192.168.56.30:$DEST_DIR/
-```
-
-Résultat : Les modifications poussées sur dev sont visibles sur http://192.168.56.30/dev, tandis que la version stable reste accessible sur http://192.168.56.30/main.
-
-# 8. Centralisation de la configuration CI/CD
-
-Dans une optique de gouvernance et de sécurité, nous avons extrait la logique du pipeline du dépôt de code pour la centraliser dans un dépôt dédié.
-
-## 8.1 Exfiltration du fichier .gitlab-ci.yml
-
-Nous avons créé un nouveau projet nommé Gitlab CI YML. Ce dépôt ne contient aucune page web, mais uniquement la configuration technique du pipeline.
-
-- Sécurisation : La fonctionnalité CI/CD a été désactivée dans les paramètres de ce dépôt de configuration pour éviter des exécutions inutiles.
-
-- Externalisation : Le fichier `.gitlab-ci.yml` original y a été déplacé.
-
-## 8.2 Liaison distante
-
-Dans notre projet principal (TP CI CD), nous avons modifié le chemin de configuration dans Settings > CI/CD > General pipelines.
-
-Syntaxe utilisée : `.gitlab-ci.yml@cicd/gitlab-ci-yml`
-
-- Vérification : Après avoir supprimé le fichier `.gitlab-ci.yml` local de toutes les branches du projet de travail, nous avons constaté que les pipelines continuaient de se déclencher normalement.
-
-- Avantage technique : Cette méthode permet de protéger la configuration du pipeline (le développeur ne peut plus la modifier par erreur) et de standardiser les processus de déploiement pour plusieurs projets simultanément.
-
-# 9. Automatisation de la maintenance avec RenovateBot
-
-La gestion des dépendances et des versions d'images est un enjeu critique. Nous avons mis en place RenovateBot pour automatiser cette surveillance.
-
-## 9.1 Configuration du Bot
-
-Nous avons créé un dépôt RenovateBot utilisant un template officiel via l'instruction `include:remote`.
-
-- Authentification : Un Personal Access Token (PAT) avec les `scopes api` et `write_repository` a été généré et stocké dans la variable `RENOVATE_TOKEN`.
-
-- Autodiscover : L'utilisation du flag `--autodiscover=true` permet au bot de scanner automatiquement tous les projets accessibles par l'utilisateur pour y proposer des mises à jour.
-
-## 9.2 Planification (Pipeline Schedules)
-
-Contrairement aux jobs précédents déclenchés par un push, Renovate fonctionne de manière temporelle via un Cron.
-
-- Fréquence : Quotidienne (Every day).
-
-- Action : Le bot analyse les fichiers de configuration (comme les versions d'images Docker) et ouvre automatiquement des Merge Requests (MR) si une version plus récente est disponible.
-
-## 9.3 Cas pratique : Mise à jour d'image
-
-Nous avons forcé l'utilisation d'une image spécifique dans notre dépôt de configuration :
+Nous avons initialisé la CI avec un job de **linting** pour valider la syntaxe HTML :
 
 ```yaml
 lint_html:
-  image: debian:12
+  script:
+    - apt update
+    - apt install -y tidy
+    - tidy -q index.html > /dev/null
 ```
 
-- Résultat : Lors de l'exécution manuelle du schedule, RenovateBot a détecté que `debian:13` était disponible et a généré une Merge Request sur le dépôt Gitlab CI YML pour suggérer la mise à jour.
+## 4.2 index.html
 
-# 10. Conclusion finale
+Création d'un fichier HTML incluant volontairement une erreur (balise `<meta` non fermée) pour tester la réaction du pipeline.
 
-Ce TP complet nous a permis de passer d'une simple vérification de syntaxe à une infrastructure DevOps industrielle et mature. Nous avons maîtrisé :
+## 4.3 Pipelines
 
-- La chaîne de build complète : Du linting à la génération d'artifacts optimisés.
+En consultant l'onglet **Build > Pipelines**, nous avons observé l'exécution du job. Le premier pipeline échoue comme prévu à cause de l'erreur de syntaxe, validant ainsi l'utilité du job de test.
 
-- Le déploiement sécurisé : Utilisation de clés SSH et de variables d'environnement pour isoler le développement de la production.
+![Pipeline qui échoue à cause de l'erreur HTML](images/PARTIE_4/4-screen-1.png)
 
-- L'industrialisation : Centralisation des pipelines pour une meilleure maintenance et sécurité.
+![Cause de l'erreur HTML](images/PARTIE_4/4-screen-2.png)
 
-- La maintenance préventive : Automatisation du cycle de vie des dépendances avec RenovateBot.
+# 5. Génération de livrables
 
-L'ensemble de ces pratiques garantit non seulement la vélocité des déploiements, mais surtout la stabilité et la sécurité du système d'information sur le long terme.
+## 5.1 Ajout et modifications d’éléments
+
+### 5.1.1 index.html
+
+Correction de la balise meta et ajout d'une image : `<img src="./logo-gitlab.jpeg" alt="Logo Gitlab" width="500">`.
+
+### 5.1.2 style.css
+
+Ajout d'une feuille de style simple (h1 en rouge).
+
+### 5.1.3 logo-gitlab.jpeg
+
+Téléversement de l'image source dans le dépôt.
+
+![Ajout de l'image gitlab dans le répo](images/PARTIE_5/5-screen-1.png)
+
+## 5.2 Mise en place de la compression d'images
+
+Ajout du job `compress_pictures` utilisant **ImageMagick** pour réduire la qualité des images à 70% et les placer dans un dossier **output/**.
+
+![Etat du job de la compression d'image](images/PARTIE_5/5-screen-4.png)
+
+
+## 5.3 Mise en place de la minification CSS
+Ajout du job minify_css utilisant une image Docker node:24 et l'outil uglifycss pour compresser le fichier CSS.
+
+![Etat du job de la minification du CSS](images/PARTIE_5/5-screen-7.png)
+
+## 5.4 Export en Artifacts
+
+Nous avons configuré les jobs pour conserver le dossier **output/** pendant 7 jours.
+
+**Résultat** : Les fichiers minifiés et compressés sont téléchargeables directement depuis l'interface GitLab.
+
+![Artifact téléchargé](images/PARTIE_5/5-screen-8.png)
+
+# 6. Mise en place de Stages
+
+Nous avons structuré le pipeline en deux étapes distinctes :
+
+**Stage test** : Exécution de `lint_html`.
+
+**Stage build** : Exécution de `minify_css`.
+
+> Note : On a pas lancer la compression d'images dans le build car le process était trop lent.
+
+Cela garantit que les fichiers ne sont générés que si les tests de syntaxe réussissent.
+
+![Pipelines de la mise en place de stages](images/PARTIE_6/6-screen-2.png)
+
+# 7. Déploiement d'un livrable
+
+## 7.1 Créer un Artifact regroupant tous les fichiers
+
+Création du job `build_artifacts` (Stage bundle) pour regrouper l'**index.html** et le contenu du dossier **output/** */.
+
+![Mise en place du job build_artifacts](images/PARTIE_7/7-screen-2.png)
+
+## 7.2 Ajout de la clé privée SSH dans GitLab
+
+Pour permettre le déploiement automatique, nous avons ajouté la clé privée fournie dans les variables CI/CD sous le nom `SSH_PRIVATE_KEY` (Type: Variable, non protégée).
+
+![Ajout de la clé privée](images/PARTIE_7/7-screen-3.png)
+
+![Ajout de l'empreinte](images/PARTIE_7/7-screen-8.png)
+
+## 7.3 Mise en place de la VM de déploiement
+
+Importation et démarrage de la VM **cicd-deploy.ova** (IP : **192.168.56.30**).
+
+## 7.4 Ajouter un job de déploiement
+
+Mise en place du job deploy :
+
+Installation du client SSH.
+
+Configuration de la clé privée dans `~/.ssh/id_rsa`.
+
+Sécurisation : Ajout de l'empreinte du serveur dans **known_hosts** via une variable pour éviter l'usage de `StrictHostKeyChecking=accept-new`.
+
+Action : Déploiement des fichiers dans `/var/www/html/` via scp.
+
+![Déploiement final de la page de test](images/PARTIE_7/7-screen-11.png)
+
+Pipeline qui passe avec succès :
+
+![Pipeline de déploiement](images/PARTIE_7/7-screen-5.png)
+
+Affichage de la page de test :
+
+![Affichage de la page de test](images/PARTIE_7/7-screen-7.png)
+
+# 8. Mise en place des différentes branches
+
+Nous avons instauré une gestion multi-environnements :
+
+**Branche dev** : Déploiement automatique vers `/var/www/html/dev`.
+
+![Affichage de la page de dev](images/PARTIE_8/8-screen-1.png)
+
+**Branche main** : Déploiement vers `/var/www/html/main` avec déclenchement manuel (`when: manual`).
+
+![Affichage de la page de prod](images/PARTIE_8/8-screen-2.png)
+
+**Dynamisation** : Utilisation de sed pour remplacer "Infos" par `$CI_COMMIT_AUTHOR` et `$CI_COMMIT_SHORT_SHA`.
+
+**Conditionnel** : La minification CSS est réservée à la branche main via le mot-clé `only: [main]`.
+
+# 9. Exfiltration du .gitlab-ci.yml
+
+Pour centraliser la maintenance, nous avons déplacé la configuration CI/CD dans un dépôt externe Gitlab CI YML.
+
+![Dépôt externe Gitlab CI YML](images/PARTIE_9/9-screen-1.png)
+
+Dans le projet principal, nous avons pointé vers ce fichier distant : `.gitlab-ci.yml@cicd/gitlab-ci-yml`.
+
+![Pointage vers le fichier distant](images/PARTIE_9/9-screen-2.png)
+
+Le pipeline reste fonctionnel même sans fichier YAML local au projet web.
+
+# 10. RenovateBot
+
+Mise en place d'un outil de veille automatique sur les dépendances :
+
+- Création du projet RenovateBot incluant le template officiel.
+
+![Création du projet RenovateBot](images/PARTIE_10/10-screen-1.png)
+
+- Configuration des settings CI/CD.
+
+![Configuration des settings CI/CD du projet RenovateBot](images/PARTIE_10/10-screen-2.png)
+
+- Configuration du token d'accès.
+
+![Configuration du token d'accès de RenovateBot](images/PARTIE_10/10-screen-3.png)
+
+- Configuration d'un Pipeline Schedule quotidien.
+
+![Configuration du pipeline schedule quotidien](images/PARTIE_10/10-screen-8.png)
+
+**Test** : En forçant une image ancienne (**debian:12**), RenovateBot a automatiquement ouvert une Merge Request pour proposer la mise à jour vers **debian:13**.
+
+![MR pour passé de debian 12 à 13 propulsé par RenovateBot](images/PARTIE_10/10-screen-10.png)
+
+# 11. Releases
+
+Modernisation et finalisation du cycle de vie :
+
+- **Rules** : Remplacement de tous les only par des rules.
+
+![Remplacament de tous les only par des rules](images/PARTIE_11/11-screen-1.png)
+
+- **Artifact Report** : Utilisation d'un fichier .env pour transmettre le $CI_JOB_ID.
+
+![Utilisation d'un fichier .env pour transmettre la variable](images/PARTIE_11/11-screen-2.png)
+
+- **Job create:release** : Utilisation de **release-cli** pour créer une version officielle GitLab lors de la création d'un Tag.
+
+![Utilisation de release-cli](images/PARTIE_11/11-screen-3.png)
+
+**Résultat final** : Lors du push d'un tag, GitLab génère une Release contenant un lien direct vers l'archive zip des artifacts de ce build précis.
+
+![Génération du release](images/PARTIE_11/11-screen-6.png)
+
+Chaine complète du pipeline :
+
+![Chaine complète du pipeline](images/PARTIE_11/11-screen-8.png)
