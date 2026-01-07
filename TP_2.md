@@ -2,13 +2,13 @@
 
 # Sommaire
 
-1. [Introduction et Centralisation](#1-introduction-et-centralisation)
+1. [Introduction](#1-introduction-et-centralisation)
 2. [Architecture du Pipeline](#2-architecture-du-pipeline)
 3. [Détails techniques des étapes](#3-détails-techniques-des-étapes)
-    - 3.1 [Stage Install : Double Environnement Virtuel](#31-stage-install--double-environnement-virtuel)
-    - 3.2 [Stage Test : Audit et Conformité](#32-stage-test--audit-et-conformité)
-    - 3.3 [Stage Build : Packaging et Persistance](#33-stage-build--packaging-et-persistance)
-    - 3.4 [Stage Deploy : Livraison Sécurisée](#34-stage-deploy--livraison-sécurisée)
+    - 3.1 [Stage Install : Double environnement virtuel](#31-stage-install--double-environnement-virtuel)
+    - 3.2 [Stage Test : Audit et conformité](#32-stage-test--audit-et-conformité)
+    - 3.3 [Stage Build : Packaging et persistance](#33-stage-build--packaging-et-persistance)
+    - 3.4 [Stage Deploy : Livraison sécurisée](#34-stage-deploy--livraison-sécurisée)
 4. [Gestion des branches](#4-gestion-des-branches)
 5. [Conclusion](#5-conclusion)
 
@@ -54,11 +54,10 @@ Le succès de ce stage est impératif pour passer à la phase de build.
 Les jobs de build (`build_zip` et `build_tar_gz`) préparent le dossier final :
 
 1. **Minification** : Le JavaScript est compressé via `uglifyjs`.
-2. **Préparation du dossier `build/**` : Nous y copions le code source (`hello.py`, `templates`, etc.) **ET** le dossier `venv/` de production. Ainsi, l'application est "prête à l'emploi" dès son extraction.
-3. **Gestion des Artifacts** : L'archive générée est conservée **7 jours**.
-* **Justification** : L'artifact est indispensable pour que le stage `Deploy` puisse accéder au fichier. Le délai de 7 jours permet un historique de déploiement sans saturer le stockage GitLab.
+2. **Préparation du dossier `build/`** : Nous y copions le code source (`hello.py`, `templates`, etc.) **ET** le dossier `venv/` de production. Ainsi, l'application est "prête à l'emploi" dès son extraction.
+3. **Gestion des artifacts** : L'archive générée est conservée **7 jours**.
 
-
+L'artifact est indispensable pour que le stage `Deploy` puisse accéder au fichier. Le délai de 7 jours permet un historique de déploiement sans saturer le stockage GitLab.
 
 ## 3.4 Stage Deploy : Livraison sécurisée
 
