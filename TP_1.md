@@ -284,7 +284,7 @@ Mise en place d'un outil de veille automatique sur les dépendances :
 
 # 11. Releases
 
-Modernisation et finalisation du cycle de vie :
+Finalisation du cycle de vie :
 
 - **Rules** : Remplacement de tous les only par des rules.
 
