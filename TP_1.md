@@ -246,7 +246,7 @@ Nous avons instauré une gestion multi-environnements :
 
 **Conditionnel** : La minification CSS est réservée à la branche main via le mot-clé `only: [main]`.
 
-# 9. Exfiltration du .gitlab-ci.yml
+# 9. Transfert du .gitlab-ci.yml
 
 Pour centraliser la maintenance, nous avons déplacé la configuration CI/CD dans un dépôt externe Gitlab CI YML.
 
