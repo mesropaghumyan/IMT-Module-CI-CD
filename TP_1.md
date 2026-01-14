@@ -290,7 +290,7 @@ Finalisation du cycle de vie :
 
 ![Remplacament de tous les only par des rules](images/TP_1/PARTIE_11/11-screen-1.png)
 
-- **Artifact Report** : Utilisation d'un fichier .env pour transmettre le $CI_JOB_ID.
+- **Artifact Report** : Utilisation d'un fichier **.env** pour transmettre le `$CI_JOB_ID`.
 
 ![Utilisation d'un fichier .env pour transmettre la variable](images/TP_1/PARTIE_11/11-screen-2.png)
 
