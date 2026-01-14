@@ -162,6 +162,7 @@ Ajout du job `compress_pictures` utilisant **ImageMagick** pour réduire la qual
 
 
 ## 5.3 Mise en place de la minification CSS
+
 Ajout du job minify_css utilisant une image Docker node:24 et l'outil uglifycss pour compresser le fichier CSS.
 
 ![Etat du job de la minification du CSS](images/TP_1/PARTIE_5/5-screen-7.png)
